@@ -54,6 +54,7 @@ def download_video_with_progress(video_url, format_selection, output_path, sid):
 
     command = [
         YT_DLP_EXECUTABLE,
+        '--cookies-from-browser', 'chrome', # หรือ 'firefox', 'edge', 'brave', etc.
         '-f', format_selection,
         '-o', output_template,
         '--no-check-certificates',
