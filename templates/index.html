@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karane will download video for you 💖</title>
+    <link rel="icon" href="/static/ico.jpg">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        /* --- CSS เดิมทั้งหมดจากไฟล์ล่าสุด --- */
+        body { font-family: sans-serif; padding: 20px; background-image: url('/static/background.jpg'); }
+        .container { max-width: 600px; margin: auto; background: #fff7e2b9; padding: 30px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        input[type="url"], input[type="text"], select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #5cb85c; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; transition: background-color 0.2s; }
+        button:hover { background-color: #4cae4c; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; } /* เพิ่ม style ให้ปุ่มตอน disabled */
+
+        .flash-messages { list-style: none; padding: 0; margin: 20px 0 0 0; opacity: 1; transition: opacity 0.5s ease-out; }
+        .flash-messages.fade-out {opacity: 0;}
+        .flash-messages li { padding: 15px; margin-bottom: 10px; border-radius: 4px; font-weight: bold; }
+        .flash-messages .success { background-color: #dff0d8; color: #3c763d; border: 1px solid #d6e9c6; }
+        .flash-messages .error { background-color: #f2dede; color: #a94442; border: 1px solid #ebccd1; }
+        .flash-messages .warning { background-color: #fcf8e3; color: #8a6d3b; border: 1px solid #faebcc; }
+
+        #video-info { margin-top: 20px; padding: 15px; border: 1px solid #ffcd95; border-radius: 10px; background-color: #f9f9f9b4; display: flex; align-items: center; gap: 15px; display: none; }
+        #video-info.loading { display: flex; justify-content: center; align-items: center; text-align: center; color: #888; min-height: 50px; }
+        #video-info.loading img  { display: none; }
+        #video-info.loading #video-title {display: block; width: 100%; text-align: center; }
+        #video-info.error { display: flex; justify-content: flex-start; align-items: center; text-align: left; color: #a94442; background-color: #f2dede; border-color: #ebccd1; min-height: 50px; }
+        #video-info.error img { display: none; }
+        #video-info.error #video-title { font-weight: normal; display: block !important; }
+        #video-thumbnail { max-width: 200px; max-height: 150px; height: auto; border-radius: 4px; border: 1px solid #ddd; flex-shrink: 0; }
+        #video-title { font-weight: bold; color: #333; margin: 0; font-size: 1.1em; text-align: left; }
+
+        .url-input-container { display: flex; align-items: center; gap: 5px; margin-bottom: 15px; }
+        .url-input-container input[type="url"] { flex-grow: 1; margin-bottom: 0; }
+        #paste-button { width: auto; padding: 8px 12px; font-size: 14px; flex-shrink: 0; background-color: #6c757d; line-height: 1.2; }
+        #paste-button:hover { background-color: #5a6268; }
+
+        /* --- เพิ่ม CSS สำหรับ Progress Bar --- */
+        #progress-container {
+            margin-top: 15px;
+            display: none; /* เริ่มต้นซ่อนไว้ */
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+        #download-progress {
+            width: 100%;
+            height: 25px;
+            margin-bottom: 5px;
+            /* Appearance for better styling in some browsers */
+            appearance: none;
+            -webkit-appearance: none;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden; /* Ensures the fill respects border-radius */
+        }
+        /* Style the progress bar fill */
+        #download-progress::-webkit-progress-bar {
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        #download-progress::-webkit-progress-value {
+            background-color: #28a745; /* Green color */
+            border-radius: 5px 0 0 5px; /* Keep left radius */
+             transition: width 0.1s linear; /* Smooth progress update */
+        }
+        #download-progress::-moz-progress-bar {
+            background-color: #28a745;
+            border-radius: 5px;
+             transition: width 0.1s linear;
+        }
+        #progress-text {
+            font-size: 0.9em;
+            color: #555;
+            text-align: center;
+            display: block;
+            white-space: pre-wrap; /* Allow wrapping for long messages */
+             word-break: break-word; /* Break long words if needed */
+        }
+         #progress-container.error-state {
+             background-color: #f8d7da; /* Light red background for error */
+             border-color: #f5c6cb;
+         }
+         #progress-container.error-state #progress-text {
+             color: #721c24; /* Darker red text for error */
+         }
+         #progress-container.success-state {
+             background-color: #d4edda; /* Light green background for success */
+             border-color: #c3e6cb;
+         }
+         #progress-container.success-state #progress-text {
+             color: #155724; /* Darker green text for success */
+         }
+        /* -------------------------------- */
+
+
+        footer.site-footer {
+             position: fixed;
+             bottom: 0;
+              right: 0;
+             padding: 10px 15px;
+             color: rgb(26, 26, 26);
+             font-size: 0.9em;
+             font-weight: bold;
+             z-index: 1000;
+         }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Karane will download video for you 💖</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div id="video-info">
+             <img id="video-thumbnail" src="" alt="Video Thumbnail" referrerpolicy="no-referrer">
+             <p id="video-title"></p>
+        </div>
+
+        <div id="progress-container">
+             <progress id="download-progress" value="0" max="100"></progress>
+             <span id="progress-text">0%</span>
+        </div> <br>
+        <form id="download-form">
+            <div>
+                <label for="video_url_input">Video URL:</label>
+                <div class="url-input-container">
+                    <input type="url" id="video_url_input" name="video_url" placeholder="Enter URL video Links" required>
+                    <button type="button" id="paste-button" title="วางจาก Clipboard">Paste</button>
+                </div>
+            </div>
+
+            <div>
+                <label for="format_choice">Select resolution:</label>
+                <select id="format_choice" name="format_choice">
+                     <option value="1">Overall the best</option>
+                     <option value="2">Video 4K (2160p)</option>
+                     <option value="3">Video 2k (1440p)</option>
+                     <option value="4">Video Full HD (1080p)</option>
+                     <option value="5">Video HD (720p)</option>
+                     <option value="6">Video SD (480p)</option>
+                     <option value="8">Best Audio Only (.mp3)</option>
+                </select>
+            </div>
+
+            <button type="button" id="submit-download-button">Starting the download now~ Let's gooo! 🚀🎬</button>
+        </form>
+
+        <p style="margin-top: 20px; font-size: 0.9em; color: #666;">
+              <strong>Description :</strong>
+              <ul>
+                  <li>Support downloading videos on Youtube, Tiktok, Instagram, Facebook, X, Bilibili platforms.</li> <br>
+                  <li>The download will be saved in the same folder named "Downloads" where the script was run.</li> <br>
+                  <li>This app is made by Nattapat2871, please visit <a href="https://github.com/Nattapat2871/Karane-will-download-video-for-you">github</a> for more information.</li>
+              </ul>
+          </p>
+    </div>
+
+    <script>
+        // --- References ---
+        const urlInput = document.getElementById('video_url_input');
+        const videoInfoDiv = document.getElementById('video-info');
+        const thumbnailImg = document.getElementById('video-thumbnail');
+        const titleP = document.getElementById('video-title');
+        const formatChoiceSelect = document.getElementById('format_choice');
+        const downloadForm = document.getElementById('download-form');
+        const submitButton = document.getElementById('submit-download-button');
+        const pasteButton = document.getElementById('paste-button');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('download-progress');
+        const progressText = document.getElementById('progress-text');
+        let fetchTimeout;
+        // -------------------
+
+        // --- Socket.IO Initialization ---
+        const socket = io(); // เชื่อมต่อ SocketIO
+
+        socket.on('connect', () => {
+            console.log('Socket.IO Connected!', socket.id);
+            // อาจจะ Enable ปุ่ม Submit ที่นี่ถ้าต้องการ
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Socket.IO Disconnected!');
+            // ควรจะ Disable ปุ่ม หรือแสดงข้อความเตือน
+        });
+        // -----------------------------
+
+       // --- SocketIO Event Listeners for Progress ---
+       socket.on('download_started', (data) => {
+            console.log('Download started:', data.message);
+            progressContainer.style.display = 'block';
+            progressContainer.className = ''; // Reset class state
+            progressBar.value = 0;
+            // --- ปรับปรุงข้อความเริ่มต้น ---
+            progressText.textContent = 'Starting download... Getting ready! 💖';
+            // ---------------------------
+            submitButton.disabled = true;
+            submitButton.textContent = 'Here we gooo~ Your video is on its way! 📦💖';
+        });
+
+        // --- ปรับปรุง Listener นี้ ---
+        socket.on('download_progress', (data) => {
+            // data จะเป็น dictionary เช่น {'percent': 15.3, 'downloaded_str': '1.98MiB', 'total_str': '12.94MiB', 'speed_str': '1.01MiB/s', 'eta_str': '00:11'}
+            console.log('Progress Data:', data);
+
+            const percent = data.percent ? Math.round(data.percent) : progressBar.value;
+            if (percent >= 0 && percent <= 100) {
+                progressBar.value = percent;
+            }
+
+            // สร้างข้อความแสดงผลแบบละเอียด
+            let displayText = `${percent}%`;
+            if (data.downloaded_str && data.total_str && data.total_str !== 'N/A' && data.total_str !== 'Unknown') {
+                 // กรณีทราบขนาดทั้งหมด
+                 displayText += ` (${data.downloaded_str.replace('~','') } / ${data.total_str})`; // เอา ~ ออกถ้ามี
+            } else if (data.downloaded_str) {
+                 // กรณีทราบแค่ขนาดที่โหลดแล้ว
+                 displayText += ` (${data.downloaded_str} downloaded)`;
+            }
+
+            if (data.speed_str && data.speed_str !== 'N/A') {
+                displayText += ` @ ${data.speed_str}`;
+            }
+            if (data.eta_str && data.eta_str !== 'N/A') {
+                displayText += ` (ETA: ${data.eta_str})`;
+            }
+
+            progressText.textContent = displayText; // อัปเดตข้อความ
+        });
+        // ----------------------------
+
+        socket.on('download_complete', (data) => {
+            console.log('Download complete:', data);
+            progressBar.value = 100;
+            // --- ปรับปรุงข้อความเมื่อเสร็จ ---
+            let completeText = `✅ ${data.status}: ${data.filename}`;
+            if (data.final_size && data.final_size !== 'N/A') {
+                completeText += ` (Size: ${data.final_size})`;
+            }
+            progressText.textContent = completeText;
+            // ----------------------------
+            progressContainer.className = 'success-state'; // Add success style
+            resetUI();
+        });
+
+        socket.on('download_error', (data) => {
+            console.error('Download error:', data.message);
+            progressText.innerHTML = `❌ Oopsie~ Something went wrong! 💔🔧:<br><pre style="white-space: pre-wrap; word-break: break-all; text-align: left; font-size: 0.9em;">${escapeHtml(data.message)}</pre>`;
+            progressBar.value = 0;
+            progressContainer.className = 'error-state';
+            resetUI();
+        });
+        // ------------------------------------------
+
+        // --- ฟังก์ชัน Reset UI ---
+        function resetUI() {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Starting the download now~ Lets gooo! 🚀🎬';
+            // ไม่ซ่อน progress bar ทันที ให้เห็นสถานะสุดท้าย
+        }
+        // ----------------------
+
+        // --- ฟังก์ชัน Escape HTML (เพื่อแสดง Error อย่างปลอดภัย) ---
+        function escapeHtml(unsafe) {
+             if (!unsafe) return '';
+             return unsafe
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;")
+                  .replace(/"/g, "&quot;")
+                  .replace(/'/g, "&#039;");
+        }
+        // ----------------------------------------------------
+
+        // --- Event Listener สำหรับปุ่ม Submit ---
+        submitButton.addEventListener('click', () => {
+            const videoUrl = urlInput.value.trim();
+            const formatChoice = formatChoiceSelect.value;
+
+            if (!videoUrl) { alert("Please enter URL"); return; }
+            if (!videoUrl.startsWith('http://') && !videoUrl.startsWith('https://')) { alert("The URL format is invalid."); return; }
+
+            console.log(`Requesting download for: ${videoUrl} with format ${formatChoice}`);
+
+            // ซ่อน Info/Progress เก่า, Reset Style
+            videoInfoDiv.style.display = 'none';
+            progressContainer.style.display = 'none';
+            progressText.textContent = '0%';
+            progressBar.value = 0;
+            progressContainer.className = ''; // Reset class
+
+            // ส่ง Event ให้ Server เริ่มโหลด
+            socket.emit('start_download_event', {
+                url: videoUrl,
+                format: formatChoice
+            });
+        });
+        // ---------------------------------------------
+
+
+        // --- โค้ดสำหรับ Fetch Info และ Paste Button ---
+        async function fetchVideoInfo(url) {
+             console.log('Fetching info for:', url);
+             videoInfoDiv.style.display = 'flex';
+             videoInfoDiv.className = 'loading';
+             thumbnailImg.src = '';
+             thumbnailImg.style.display = 'none';
+             titleP.textContent = 'in progress~ Sit tight! 💖📥';
+
+             try {
+                 const response = await fetch('/get_video_info', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json', },
+                     body: JSON.stringify({ video_url: url }),
+                 });
+                 const data = await response.json();
+
+                 if (response.ok) {
+                      console.log('Info received:', data);
+                      videoInfoDiv.className = '';
+                      videoInfoDiv.style.display = 'flex';
+                      titleP.textContent = data.title || 'ไม่พบชื่อวิดีโอ';
+                      if (data.thumbnail) {
+                          thumbnailImg.src = data.thumbnail;
+                          thumbnailImg.style.display = 'block';
+                      } else {
+                          thumbnailImg.style.display = 'none';
+                      }
+                 } else {
+                     console.error('Error fetching info:', data.error);
+                      videoInfoDiv.className = 'error';
+                      videoInfoDiv.style.display = 'flex';
+                      titleP.textContent = `Oopsie~ Something went wrong! 💔🔧: ${escapeHtml(data.error) || 'ไม่ทราบสาเหตุ'}`; // Escape error message
+                      thumbnailImg.style.display = 'none';
+                 }
+             } catch (error) {
+                 console.error('Network or fetch error:', error);
+                  videoInfoDiv.className = 'error';
+                  videoInfoDiv.style.display = 'flex';
+                  titleP.textContent = 'There was an error connecting to the server.';
+                  thumbnailImg.style.display = 'none';
+             }
+        }
+
+        urlInput.addEventListener('input', () => {
+             clearTimeout(fetchTimeout);
+             const url = urlInput.value.trim();
+             if (url) {
+                 fetchTimeout = setTimeout(() => {
+                     if (url.startsWith('http://') || url.startsWith('https://')) {
+                          fetchVideoInfo(url);
+                     }
+                 }, 1000);
+             } else {
+                 videoInfoDiv.style.display = 'none';
+             }
+        });
+
+        urlInput.addEventListener('blur', () => {
+             clearTimeout(fetchTimeout);
+             const url = urlInput.value.trim();
+             if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                 if (videoInfoDiv.style.display === 'none' || videoInfoDiv.classList.contains('loading')) {
+                      fetchVideoInfo(url);
+                 }
+             } else {
+                  videoInfoDiv.style.display = 'none';
+             }
+         });
+
+        pasteButton.addEventListener('click', async () => {
+            if (!navigator.clipboard || !navigator.clipboard.readText) { alert('ฟีเจอร์วางข้อความไม่รองรับในเบราว์เซอร์นี้ หรือต้องใช้ HTTPS'); return; }
+            try {
+                const text = await navigator.clipboard.readText();
+                console.log('Pasted text:', text);
+                urlInput.value = text.trim();
+                urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+            } catch (err) {
+                console.error('Failed to read clipboard contents: ', err);
+                alert('ไม่สามารถอ่านข้อมูลจาก Clipboard ได้\nอาจจะต้องอนุญาตในหน้าต่าง Pop-up หรือลองคัดลอกข้อความใหม่อีกครั้ง');
+            }
+        });
+        // ---------------------------------------------------
+
+        // --- โค้ดสำหรับซ่อน Flash Messages ---
+        document.addEventListener('DOMContentLoaded', (event) => {
+            const flashMessagesContainer = document.querySelector('.flash-messages');
+            if (flashMessagesContainer) {
+                console.log('Flash messages found. Setting timeout to start fade out.');
+                setTimeout(() => {
+                    console.log('Adding fade-out class to flash messages.');
+                    flashMessagesContainer.classList.add('fade-out');
+                    setTimeout(() => {
+                         console.log('Hiding flash messages element after fade.');
+                         flashMessagesContainer.style.display = 'none';
+                    }, 500);
+                }, 10000);
+            }
+        });
+        // ---------------------------------------------
+
+    </script>
+     <footer class="site-footer"> &copy; 2025 <a href="https://github.com/Nattapat2871">Nattapat2871.</a> All Rights Reserved.
+
+    </body>
+</html>
