@@ -5,4 +5,4 @@
 
 
 <p align= "center">
-        <a >English </a>   <b href="/README_TH.md">ภาษาไทย</b>　
+        <b>English</b>　<a href="/README_TH.md">ภาษาไทย</a>
